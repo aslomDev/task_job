@@ -40,7 +40,9 @@ public class JobTaskServiceImpl implements JobTaskService {
     public BaseResponse updateJobTask(JobTask jobTask) {
         Optional<JobTask> hasElement = jobTaskRepository.findById(jobTask.getId());
         if (hasElement.isPresent()){
-            JobTask saved = jobTaskRepository.save(jobTask);
+            JobTask saved = jobTaskRepository.saveAndFlush(jobTask);
+            runnable.setJobTask(saved);
+            executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
             return new BaseResponseData<>(saved);
         }
         return new BaseResponse(false, "not found in db");
