@@ -1,7 +1,9 @@
 package com.uz.service.impl;
 
 import com.uz.entity.JobTask;
+import com.uz.entity.enums.Status;
 import com.uz.repository.JobTaskRepository;
+import com.uz.service.CronService;
 import com.uz.service.JobTaskService;
 import com.uz.service.dto.BaseResponseData;
 import com.uz.service.dto.BaseResponse;
@@ -14,8 +16,11 @@ import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.ZoneId;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Optional;
 import java.util.TimeZone;
+import java.util.concurrent.ScheduledFuture;
 
 @Slf4j
 @Service
@@ -23,12 +28,15 @@ import java.util.TimeZone;
 public class JobTaskServiceImpl implements JobTaskService {
     private final JobTaskRepository jobTaskRepository;
     private final TaskScheduler executor;
-    private final TaskJobRunnable runnable;
+    private final CronService cronService;
+    private TaskJobRunnable runnable;
 
-    public JobTaskServiceImpl(JobTaskRepository jobTaskRepository, @Qualifier("taskScheduler") TaskScheduler executor, TaskJobRunnable runnable) {
+    Map<Long, ScheduledFuture<?>> jobsMap = new HashMap<>();
+
+    public JobTaskServiceImpl(JobTaskRepository jobTaskRepository, @Qualifier("taskScheduler") TaskScheduler executor, CronService cronService) {
         this.jobTaskRepository = jobTaskRepository;
         this.executor = executor;
-        this.runnable = runnable;
+        this.cronService = cronService;
     }
 
     @Override
@@ -41,11 +49,28 @@ public class JobTaskServiceImpl implements JobTaskService {
         Optional<JobTask> hasElement = jobTaskRepository.findById(jobTask.getId());
         if (hasElement.isPresent()){
             JobTask saved = jobTaskRepository.saveAndFlush(jobTask);
-            runnable.setJobTask(saved);
-            executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
+            if (saved.getStatus().equals(Status.DISABLE)){
+                cancelJob(saved.getId());
+            }else {
+                runnable = new TaskJobRunnable(cronService);
+                runnable.setJobTask(saved);
+                ScheduledFuture<?> schedule = executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
+                jobsMap.put(saved.getId(), schedule);
+            }
             return new BaseResponseData<>(saved);
         }
         return new BaseResponse(false, "not found in db");
+    }
+
+    private void cancelJob(Long id) {
+        if (id != null && jobsMap.containsKey(id)){
+            ScheduledFuture<?> scheduledFuture = jobsMap.get(id);
+            scheduledFuture.cancel(true);
+            jobsMap.put(id, null);
+            log.info("Task is canceled: {}", jobsMap.get(id));
+        } else {
+            log.info("Task not found");
+        }
     }
 
     @Override
@@ -54,9 +79,10 @@ public class JobTaskServiceImpl implements JobTaskService {
         jobTask.setCronExpression(requestDTO.getCronExpression());
         jobTask.setData(requestDTO.getData());
         JobTask saved = jobTaskRepository.saveAndFlush(jobTask);
+        runnable = new TaskJobRunnable(cronService);
         runnable.setJobTask(saved);
-        executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
-
+        ScheduledFuture<?> schedule = executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
+        jobsMap.put(saved.getId(), schedule);
         if (saved.getId() != null) {
             return new BaseResponseData<>(saved);
         }

@@ -33,7 +33,7 @@ public class CronServiceImpl implements CronService {
         }else {
             List<?> resultList = entityManager.createNativeQuery(jobTask.getData()).getResultList();
             if (!resultList.isEmpty()){
-                log.info("ResultSet: {},", resultList.toArray());
+//                log.info("ResultSet: {},", resultList.toArray());
             }
         }
         log.info("End task");
