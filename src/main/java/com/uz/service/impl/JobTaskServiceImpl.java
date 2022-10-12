@@ -18,10 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.PostConstruct;
 import java.time.ZoneId;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.TimeZone;
+import java.util.*;
 import java.util.concurrent.ScheduledFuture;
 
 @Slf4j
@@ -50,7 +47,7 @@ public class JobTaskServiceImpl implements JobTaskService {
     private void executeAllActiveTaskAfterRestartingServer(){
         jobTaskRepository.findAll()
                 .forEach(jobTask -> {
-                    if (jobTask.getStatus().equals(Status.ENABLE)){
+                    if (Objects.equals(jobTask.getStatus(), Status.ENABLE)){
                         runnable = new TaskJobRunnable(cronService);
                         runnable.setJobTask(jobTask);
                         ScheduledFuture<?> schedule = executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
@@ -82,7 +79,7 @@ public class JobTaskServiceImpl implements JobTaskService {
             ScheduledFuture<?> scheduledFuture = jobsMap.get(id);
             scheduledFuture.cancel(true);
             jobsMap.remove(id);
-            log.info("Task is canceled: {}", jobsMap.get(id));
+            log.info("Task is canceled: {}", id);
         } else {
             log.info("Task not found");
         }
