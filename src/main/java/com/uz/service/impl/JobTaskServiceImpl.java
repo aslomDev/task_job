@@ -81,7 +81,7 @@ public class JobTaskServiceImpl implements JobTaskService {
         if (id != null && jobsMap.containsKey(id)){
             ScheduledFuture<?> scheduledFuture = jobsMap.get(id);
             scheduledFuture.cancel(true);
-            jobsMap.put(id, null);
+            jobsMap.remove(id);
             log.info("Task is canceled: {}", jobsMap.get(id));
         } else {
             log.info("Task not found");
