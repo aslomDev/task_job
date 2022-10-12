@@ -15,6 +15,8 @@ import org.springframework.scheduling.TaskScheduler;
 import org.springframework.scheduling.support.CronTrigger;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import javax.annotation.PostConstruct;
 import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.Map;
@@ -42,6 +44,19 @@ public class JobTaskServiceImpl implements JobTaskService {
     @Override
     public BaseResponse getAllTask() {
         return new BaseResponseData<>(jobTaskRepository.findAll());
+    }
+
+    @PostConstruct
+    private void executeAllActiveTaskAfterRestartingServer(){
+        jobTaskRepository.findAll()
+                .forEach(jobTask -> {
+                    if (jobTask.getStatus().equals(Status.ENABLE)){
+                        runnable = new TaskJobRunnable(cronService);
+                        runnable.setJobTask(jobTask);
+                        ScheduledFuture<?> schedule = executor.schedule(runnable, new CronTrigger(jobTask.getCronExpression(), TimeZone.getTimeZone(ZoneId.systemDefault().getId())));
+                        jobsMap.put(jobTask.getId(), schedule);
+                    }
+                });
     }
 
     @Override
@@ -94,6 +109,7 @@ public class JobTaskServiceImpl implements JobTaskService {
         Optional<JobTask> hasElement = jobTaskRepository.findById(requestDTO.getId());
         if (hasElement.isPresent()){
             jobTaskRepository.delete(requestDTO);
+            cancelJob(requestDTO.getId());
             return new BaseResponse(true, "deleted");
         }
         return new BaseResponse(false, "not found in db");
